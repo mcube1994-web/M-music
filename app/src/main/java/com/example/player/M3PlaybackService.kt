@@ -1,5 +1,6 @@
 package com.example.player
 
+import android.app.PendingIntent
 import android.content.Intent
 import androidx.annotation.OptIn
 import androidx.media3.common.AudioAttributes
@@ -14,13 +15,18 @@ import androidx.media3.exoplayer.audio.TeeAudioProcessor
 import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
 import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
+import com.example.MainActivity
 import com.example.audio.AiAutoEqEngine
+import com.example.audio.M3TenBandEqAudioProcessor
 import com.example.audio.PcmVisualizerProcessor
 
 @OptIn(UnstableApi::class)
 object M3EngineRegistry {
+    val eqAudioProcessor = M3TenBandEqAudioProcessor()
     val pcmProcessor = PcmVisualizerProcessor()
-    val aiAutoEqEngine = AiAutoEqEngine()
+    val aiAutoEqEngine = AiAutoEqEngine().apply {
+        bindProcessor(eqAudioProcessor)
+    }
 
     @Volatile
     private var sharedPlayer: ExoPlayer? = null
@@ -32,6 +38,9 @@ object M3EngineRegistry {
     var lastSpatializerEnabled: Boolean = true
         private set
 
+    @Volatile
+    private var appliedSpatializerConfig: Pair<Boolean, Boolean>? = null
+
     fun getOrCreatePlayer(context: android.content.Context): ExoPlayer {
         return sharedPlayer ?: synchronized(this) {
             sharedPlayer ?: createPlayer(context.applicationContext).also { sharedPlayer = it }
@@ -41,6 +50,10 @@ object M3EngineRegistry {
     fun applySpatializerSettings(enabled: Boolean, isVideo: Boolean = false) {
         lastSpatializerEnabled = enabled
         val player = sharedPlayer ?: return
+        val nextConfig = enabled to isVideo
+        if (appliedSpatializerConfig == nextConfig) return
+        appliedSpatializerConfig = nextConfig
+
         val spatialBehavior = if (enabled) {
             C.SPATIALIZATION_BEHAVIOR_AUTO
         } else {
@@ -76,7 +89,7 @@ object M3EngineRegistry {
                 return DefaultAudioSink.Builder(context)
                     .setEnableFloatOutput(enableFloatOutput)
                     .setEnableAudioTrackPlaybackParams(enableAudioTrackPlaybackParams)
-                    .setAudioProcessors(arrayOf(TeeAudioProcessor(pcmProcessor)))
+                    .setAudioProcessors(arrayOf(eqAudioProcessor, TeeAudioProcessor(pcmProcessor)))
                     .build()
             }
         }.setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER)
@@ -115,6 +128,7 @@ object M3EngineRegistry {
         sharedPlayer?.release()
         sharedPlayer = null
         sharedTrackSelector = null
+        appliedSpatializerConfig = null
         aiAutoEqEngine.releaseDsp()
     }
 }
@@ -125,7 +139,18 @@ class M3PlaybackService : MediaSessionService() {
     override fun onCreate() {
         super.onCreate()
         val player = M3EngineRegistry.getOrCreatePlayer(this)
-        mediaSession = MediaSession.Builder(this, player).build()
+        val launchIntent = Intent(this, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
+        }
+        val sessionActivityPendingIntent = PendingIntent.getActivity(
+            this,
+            0,
+            launchIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+        mediaSession = MediaSession.Builder(this, player)
+            .setSessionActivity(sessionActivityPendingIntent)
+            .build()
     }
 
     override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaSession? {

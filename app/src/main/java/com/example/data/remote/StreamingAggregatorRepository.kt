@@ -1,6 +1,7 @@
 package com.example.data.remote
 
 import com.example.R
+import com.example.data.local.SearchCacheStore
 import com.example.domain.model.MediaTrack
 import com.example.domain.model.MusicLanguage
 import com.example.domain.model.NavidromeConfig
@@ -10,10 +11,10 @@ import kotlinx.coroutines.coroutineScope
 
 class StreamingAggregatorRepository(
     private val jioSaavnClient: JioSaavnClient,
-    private val itunesClient: ItunesClient,
     private val audiusClient: AudiusClient,
     private val archiveClient: InternetArchiveClient,
-    private val navidromeClient: NavidromeClient
+    private val navidromeClient: NavidromeClient,
+    private val searchCacheStore: SearchCacheStore? = null
 ) {
 
     suspend fun loadHomeFeed(
@@ -42,22 +43,6 @@ class StreamingAggregatorRepository(
             }
         }
 
-        val itunesInDeferred = async {
-            if (language != MusicLanguage.ENGLISH_GLOBAL && language != MusicLanguage.LOSSLESS) {
-                itunesClient.searchTracks(effectiveQuery, countryCode = "IN", languageHint = language)
-            } else emptyList()
-        }
-
-        val itunesGlobalDeferred = async {
-            if (language == MusicLanguage.ALL || language == MusicLanguage.ENGLISH_GLOBAL) {
-                itunesClient.searchTracks(
-                    if (query.isBlank()) "spatial pop electronic" else effectiveQuery,
-                    countryCode = "US",
-                    languageHint = MusicLanguage.ENGLISH_GLOBAL
-                )
-            } else emptyList()
-        }
-
         val audiusDeferred = async {
             if (language == MusicLanguage.ALL || language == MusicLanguage.ENGLISH_GLOBAL) {
                 if (query.isBlank()) audiusClient.getTrendingTracks()
@@ -79,16 +64,12 @@ class StreamingAggregatorRepository(
             } else emptyList()
         }
 
-        val combined = buildList {
+        buildList {
             addAll(navidromeDeferred.await())
             addAll(saavnDeferred.await())
-            addAll(itunesInDeferred.await())
             addAll(audiusDeferred.await())
-            addAll(itunesGlobalDeferred.await())
             addAll(archiveDeferred.await())
         }.distinctBy { "${it.title.lowercase()}_${it.artist.lowercase()}" }
-
-        combined
     }
 
     suspend fun searchLosslessForDownload(query: String): List<MediaTrack> = coroutineScope {
@@ -107,11 +88,15 @@ class StreamingAggregatorRepository(
     suspend fun searchAllSources(
         query: String,
         navidromeConfig: NavidromeConfig
-    ): List<MediaTrack> = coroutineScope {
-        val q = query.trim().ifBlank { return@coroutineScope emptyList() }
+    ): Pair<List<MediaTrack>, Boolean> = coroutineScope {
+        val q = query.trim().ifBlank { return@coroutineScope emptyList<MediaTrack>() to false }
+
+        val cacheKey = "${q}_${navidromeConfig.isConnected}"
+        searchCacheStore?.getCachedResults(cacheKey)?.let { cached ->
+            return@coroutineScope cached to true
+        }
+
         val saavn = async { jioSaavnClient.searchSongs(q, MusicLanguage.ALL) }
-        val itunesIn = async { itunesClient.searchTracks(q, "IN", MusicLanguage.HINDI) }
-        val itunesUs = async { itunesClient.searchTracks(q, "US", MusicLanguage.ENGLISH_GLOBAL) }
         val audius = async { audiusClient.searchTracks(q) }
         val archive = async { archiveClient.searchLosslessFlac(q) }
         val navidrome = async {
@@ -119,14 +104,17 @@ class StreamingAggregatorRepository(
             else emptyList()
         }
 
-        buildList {
+        val combined = buildList {
             addAll(navidrome.await())
             addAll(saavn.await())
             addAll(audius.await())
-            addAll(itunesIn.await())
-            addAll(itunesUs.await())
             addAll(archive.await())
         }.distinctBy { it.id }
+
+        if (combined.isNotEmpty()) {
+            searchCacheStore?.saveResults(cacheKey, combined)
+        }
+        combined to false
     }
 
     fun getCuratedVideoCatalog(): List<MediaTrack> = listOf(

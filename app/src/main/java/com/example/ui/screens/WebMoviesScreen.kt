@@ -3,6 +3,7 @@ package com.example.ui.screens
 import android.annotation.SuppressLint
 import android.content.Intent
 import android.net.Uri
+import android.view.View
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
@@ -77,6 +78,8 @@ fun WebMoviesScreen(
     onUrlLoaded: (url: String, title: String?, loading: Boolean?) -> Unit,
     onStreamDetected: (String) -> Unit,
     onPlayInM3Player: (streamUrl: String, title: String) -> Unit,
+    onEnterWebVideoFullscreen: (View, WebChromeClient.CustomViewCallback) -> Unit = { _, _ -> },
+    onExitWebVideoFullscreen: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -344,6 +347,16 @@ fun WebMoviesScreen(
                         webChromeClient = object : WebChromeClient() {
                             override fun onReceivedTitle(view: WebView?, title: String?) {
                                 onUrlLoaded(view?.url ?: state.currentUrl, title, null)
+                            }
+
+                            override fun onShowCustomView(view: View?, callback: CustomViewCallback?) {
+                                if (view != null && callback != null) {
+                                    onEnterWebVideoFullscreen(view, callback)
+                                }
+                            }
+
+                            override fun onHideCustomView() {
+                                onExitWebVideoFullscreen()
                             }
                         }
 

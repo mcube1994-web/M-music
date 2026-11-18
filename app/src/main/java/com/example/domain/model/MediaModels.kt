@@ -24,12 +24,17 @@ enum class MusicLanguage(val label: String, val queryHint: String) {
 
 enum class StreamingBackend(val displayName: String) {
     JIOSAAVN("JioSaavn"),
-    ITUNES("iTunes"),
     AUDIUS("Audius"),
     ARCHIVE("Internet Archive"),
     NAVIDROME("Navidrome"),
     LOCAL("Local File"),
     HLS("HLS Stream")
+}
+
+enum class RepeatMode(val label: String) {
+    OFF("Repeat Off"),
+    REPEAT_ALL("Repeat All"),
+    REPEAT_ONE("Repeat One")
 }
 
 enum class VisualizerMode(val label: String, val badge: String) {
@@ -114,28 +119,28 @@ enum class AiEqMode(
 ) {
     AUTO_DETECT(
         label = "AI Auto",
-        description = "Adapts dynamically between Music & Cinema",
-        defaultGainsDb = listOf(1.5f, 1.0f, 0.5f, 0f, 0.5f, 1.0f, 1.5f, 2.0f, 2.5f, 2.0f)
+        description = "Clean, balanced adaptation between Music & Cinema",
+        defaultGainsDb = listOf(0.5f, 0.5f, 0f, 0f, 0f, 0.5f, 1.0f, 1.2f, 1.5f, 1.0f)
     ),
     BASS_BOOST(
         label = "Bass Boost",
-        description = "Deep sub-bass punch for EDM, Punjabi & hip-hop",
-        defaultGainsDb = listOf(6.0f, 5.2f, 3.8f, 1.5f, 0f, -0.5f, 0.5f, 1.5f, 2.0f, 2.5f)
+        description = "Warm, punchy sub-bass without muddying vocals",
+        defaultGainsDb = listOf(3.5f, 3.0f, 2.0f, 0.5f, -0.5f, -0.5f, 0f, 0.8f, 1.2f, 1.5f)
     ),
     VOCAL_CLARITY(
         label = "Vocal Clarity",
-        description = "Forward midrange presence for Bollywood & acoustic",
-        defaultGainsDb = listOf(-1.0f, -0.5f, 0.5f, 1.5f, 3.0f, 4.2f, 4.0f, 2.5f, 1.5f, 1.0f)
+        description = "Clean midrange presence for Bollywood & acoustic",
+        defaultGainsDb = listOf(-1.5f, -1.0f, 0f, 1.0f, 2.0f, 3.0f, 2.8f, 1.8f, 1.0f, 0.5f)
     ),
     SPATIAL_ATMOS(
         label = "Spatial Atmos",
-        description = "Wide 7.1.4 soundstage & shimmering height harmonics",
-        defaultGainsDb = listOf(3.0f, 2.2f, 1.0f, 0f, -0.5f, 1.5f, 3.0f, 4.0f, 5.0f, 4.5f)
+        description = "Wide 7.1.4 soundstage with crisp height detail",
+        defaultGainsDb = listOf(1.5f, 1.0f, 0.5f, 0f, -0.5f, 0.8f, 1.8f, 2.5f, 3.0f, 2.5f)
     ),
     CINEMA_SURROUND(
         label = "Cinema Surround",
-        description = "LFE rumble + crisp dialogue center channel for movies",
-        defaultGainsDb = listOf(5.0f, 4.0f, 2.0f, -1.0f, 1.5f, 3.5f, 3.0f, 2.5f, 3.5f, 4.0f)
+        description = "Controlled LFE rumble + clear dialogue for movies",
+        defaultGainsDb = listOf(2.8f, 2.2f, 1.0f, -1.0f, 1.0f, 2.5f, 2.2f, 1.8f, 2.2f, 2.5f)
     ),
     FLAT_HIFI(
         label = "Flat Hi-Fi",

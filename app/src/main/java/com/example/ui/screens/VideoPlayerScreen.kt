@@ -19,14 +19,18 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.FolderOpen
+import androidx.compose.material.icons.rounded.Fullscreen
 import androidx.compose.material.icons.rounded.GraphicEq
 import androidx.compose.material.icons.rounded.LiveTv
 import androidx.compose.material.icons.rounded.PlayCircle
+import androidx.compose.material.icons.rounded.ScreenRotation
 import androidx.compose.material.icons.rounded.SurroundSound
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -55,8 +59,11 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
 import coil.compose.AsyncImage
 import com.example.audio.AiEqState
@@ -74,6 +81,7 @@ import com.example.ui.theme.SpatialCyan
 import com.example.ui.theme.TextPrimary
 import com.example.ui.theme.TextSecondary
 
+@androidx.annotation.OptIn(UnstableApi::class)
 @Composable
 fun VideoPlayerScreen(
     exoPlayer: ExoPlayer,
@@ -81,13 +89,17 @@ fun VideoPlayerScreen(
     curatedVideos: List<MediaTrack>,
     audioTrackOptions: List<AudioTrackOption>,
     aiEqState: AiEqState,
+    isVideoFullscreen: Boolean,
     onPlayVideo: (MediaTrack) -> Unit,
     onPlayStreamUrl: (String) -> Unit,
     onSelectAudioTrack: (AudioTrackOption) -> Unit,
     onImportLocalVideo: (android.net.Uri) -> Unit,
+    onEnterFullscreen: () -> Unit,
+    onToggleRotation: () -> Unit,
     onOpenDolbySheet: () -> Unit,
     onOpenEqualizerDialog: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    listState: LazyListState = rememberLazyListState()
 ) {
     var streamUrlInput by remember { mutableStateOf("") }
     val localVideoPicker = rememberLauncherForActivityResult(
@@ -96,7 +108,10 @@ fun VideoPlayerScreen(
     )
 
     LazyColumn(
-        modifier = modifier.fillMaxSize(),
+        state = listState,
+        modifier = modifier
+            .fillMaxSize()
+            .testTag("video_lazy_column"),
         contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
@@ -155,23 +170,80 @@ fun VideoPlayerScreen(
                     borderColor = SpatialCyan.copy(alpha = 0.45f)
                 ) {
                     Column {
-                        AndroidView(
-                            factory = { ctx ->
-                                PlayerView(ctx).apply {
-                                    useController = true
-                                    player = exoPlayer
-                                }
-                            },
-                            update = { view ->
-                                if (view.player !== exoPlayer) {
-                                    view.player = exoPlayer
-                                }
-                            },
+                        Box(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .aspectRatio(16f / 9f)
                                 .background(Color.Black)
-                        )
+                        ) {
+                            if (!isVideoFullscreen) {
+                                AndroidView(
+                                    factory = { ctx ->
+                                        PlayerView(ctx).apply {
+                                            useController = true
+                                            resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
+                                            player = exoPlayer
+                                            setFullscreenButtonState(false)
+                                            setFullscreenButtonClickListener { _ ->
+                                                onEnterFullscreen()
+                                            }
+                                        }
+                                    },
+                                    update = { view ->
+                                        if (view.player !== exoPlayer) {
+                                            view.player = exoPlayer
+                                        }
+                                        view.setFullscreenButtonState(false)
+                                        view.setFullscreenButtonClickListener { _ ->
+                                            onEnterFullscreen()
+                                        }
+                                    },
+                                    onRelease = { view ->
+                                        view.player = null
+                                    },
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .testTag("video_inline_player_view")
+                                )
+                            }
+
+                            // Explicit Rotate & Fullscreen Controls
+                            Row(
+                                modifier = Modifier
+                                    .align(Alignment.TopEnd)
+                                    .padding(8.dp),
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                IconButton(
+                                    onClick = onToggleRotation,
+                                    modifier = Modifier
+                                        .clip(CircleShape)
+                                        .background(Color.Black.copy(alpha = 0.62f))
+                                        .minimumInteractiveComponentSize()
+                                        .testTag("video_rotate_btn")
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Rounded.ScreenRotation,
+                                        contentDescription = "Rotate Video Screen",
+                                        tint = TextPrimary
+                                    )
+                                }
+                                IconButton(
+                                    onClick = onEnterFullscreen,
+                                    modifier = Modifier
+                                        .clip(CircleShape)
+                                        .background(Color.Black.copy(alpha = 0.62f))
+                                        .minimumInteractiveComponentSize()
+                                        .testTag("video_fullscreen_btn")
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Rounded.Fullscreen,
+                                        contentDescription = "Fullscreen Video",
+                                        tint = SpatialCyan
+                                    )
+                                }
+                            }
+                        }
                         Column(
                             modifier = Modifier.padding(12.dp),
                             verticalArrangement = Arrangement.spacedBy(8.dp)

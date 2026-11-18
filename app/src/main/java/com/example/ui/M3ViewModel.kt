@@ -16,9 +16,9 @@ import com.example.audio.VisualizerTelemetry
 import com.example.data.local.M3Database
 import com.example.data.local.OfflineVaultRepository
 import com.example.data.local.PreferencesStore
+import com.example.data.local.SearchCacheStore
 import com.example.data.remote.AudiusClient
 import com.example.data.remote.InternetArchiveClient
-import com.example.data.remote.ItunesClient
 import com.example.data.remote.JioSaavnClient
 import com.example.data.remote.LrclibClient
 import com.example.data.remote.NavidromeClient
@@ -64,6 +64,7 @@ data class SearchUiState(
     val query: String = "",
     val selectedBackendFilter: StreamingBackend? = null,
     val isSearching: Boolean = false,
+    val isFromCache: Boolean = false,
     val results: List<MediaTrack> = emptyList()
 )
 
@@ -95,17 +96,17 @@ class M3ViewModel(application: Application) : AndroidViewModel(application) {
 
     private val database = M3Database.getInstance(application)
     private val prefsStore = PreferencesStore(application)
+    private val searchCacheStore = SearchCacheStore(application)
     private val vaultRepo = OfflineVaultRepository(application, database.vaultDao(), okHttpClient)
 
     private val jioSaavnClient = JioSaavnClient(okHttpClient)
-    private val itunesClient = ItunesClient(okHttpClient)
     private val audiusClient = AudiusClient(okHttpClient)
     private val archiveClient = InternetArchiveClient(okHttpClient)
     private val navidromeClient = NavidromeClient(okHttpClient)
     private val lrclibClient = LrclibClient(okHttpClient)
 
     private val aggregator = StreamingAggregatorRepository(
-        jioSaavnClient, itunesClient, audiusClient, archiveClient, navidromeClient
+        jioSaavnClient, audiusClient, archiveClient, navidromeClient, searchCacheStore
     )
 
     val playerController = M3PlayerController(application, viewModelScope)
@@ -158,6 +159,12 @@ class M3ViewModel(application: Application) : AndroidViewModel(application) {
 
     private val _showEqualizerDialog = MutableStateFlow(false)
     val showEqualizerDialog: StateFlow<Boolean> = _showEqualizerDialog.asStateFlow()
+
+    private val _showQueueSheet = MutableStateFlow(false)
+    val showQueueSheet: StateFlow<Boolean> = _showQueueSheet.asStateFlow()
+
+    private val _isVideoFullscreen = MutableStateFlow(false)
+    val isVideoFullscreen: StateFlow<Boolean> = _isVideoFullscreen.asStateFlow()
 
     private val _homeState = MutableStateFlow(HomeUiState())
     val homeState: StateFlow<HomeUiState> = _homeState.asStateFlow()
@@ -223,6 +230,16 @@ class M3ViewModel(application: Application) : AndroidViewModel(application) {
 
     fun selectTab(tab: AppTab) {
         _activeTab.value = tab
+        if (tab != AppTab.VIDEO_PLAYER) {
+            _isVideoFullscreen.value = false
+        }
+    }
+
+    fun setVideoFullscreen(fullscreen: Boolean) {
+        _isVideoFullscreen.value = fullscreen
+        if (fullscreen) {
+            _isStudioExpanded.value = false
+        }
     }
 
     fun setStudioExpanded(expanded: Boolean) {
@@ -284,6 +301,10 @@ class M3ViewModel(application: Application) : AndroidViewModel(application) {
 
     fun setEqualizerDialogVisible(visible: Boolean) {
         _showEqualizerDialog.value = visible
+    }
+
+    fun setQueueSheetVisible(visible: Boolean) {
+        _showQueueSheet.value = visible
     }
 
     fun triggerOpeningSweep() {
@@ -379,12 +400,46 @@ class M3ViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    // --- Playback Controls ---
+    // --- Playback & Queue Controls ---
     fun playTrack(track: MediaTrack, queue: List<MediaTrack> = listOf(track)) {
         playerController.playTrack(track, queue)
         if (!track.isVideo && _isStudioExpanded.value) {
             loadLyricsForTrack(track)
         }
+    }
+
+    fun addToQueue(track: MediaTrack) {
+        playerController.addToQueue(track)
+        showToast("Added '${track.title}' to queue")
+    }
+
+    fun playNext(track: MediaTrack) {
+        playerController.playNext(track)
+        showToast("'${track.title}' will play next")
+    }
+
+    fun jumpToQueueIndex(index: Int) {
+        playerController.jumpToQueueIndex(index)
+    }
+
+    fun removeFromQueue(index: Int) {
+        playerController.removeFromQueue(index)
+    }
+
+    fun clearQueue() {
+        playerController.clearQueue()
+        showToast("Cleared upcoming tracks")
+    }
+
+    fun toggleShuffle() {
+        playerController.toggleShuffle()
+        val enabled = playbackState.value.shuffleEnabled
+        showToast(if (enabled) "Shuffle On" else "Shuffle Off")
+    }
+
+    fun cycleRepeatMode() {
+        playerController.cycleRepeatMode()
+        showToast(playbackState.value.repeatMode.label)
     }
 
     fun playVideoUrl(rawUrl: String, title: String = "Direct Stream Video") {
@@ -445,7 +500,7 @@ class M3ViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             _searchState.value = _searchState.value.copy(query = q, isSearching = true)
             vaultRepo.recordSearch(q)
-            val remoteResults = aggregator.searchAllSources(q, navidromeConfig.value)
+            val (remoteResults, fromCache) = aggregator.searchAllSources(q, navidromeConfig.value)
             val localMatches = vaultTracks.value.filter {
                 it.title.contains(q, true) || it.artist.contains(q, true)
             }
@@ -454,6 +509,7 @@ class M3ViewModel(application: Application) : AndroidViewModel(application) {
             }
             _searchState.value = _searchState.value.copy(
                 isSearching = false,
+                isFromCache = fromCache,
                 results = (localMatches + videoMatches + remoteResults).distinctBy { it.id }
             )
         }

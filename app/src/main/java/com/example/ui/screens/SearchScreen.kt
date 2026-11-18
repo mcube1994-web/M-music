@@ -61,6 +61,8 @@ fun SearchScreen(
     onSelectBackendFilter: (StreamingBackend?) -> Unit,
     onRemoveRecent: (String) -> Unit,
     onPlayTrack: (MediaTrack, List<MediaTrack>) -> Unit,
+    onPlayNext: (MediaTrack) -> Unit = {},
+    onAddToQueue: (MediaTrack) -> Unit = {},
     onDownloadTrack: (MediaTrack) -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -84,7 +86,8 @@ fun SearchScreen(
                     color = TextPrimary
                 )
                 Text(
-                    text = "JioSaavn • iTunes IN/Global • Audius • Internet Archive • Navidrome • Vault",
+                    text = "JioSaavn • Audius • Internet Archive • Navidrome • Vault" +
+                        if (state.isFromCache) " • Instant Cache" else "",
                     style = MaterialTheme.typography.bodySmall,
                     color = TextSecondary
                 )
@@ -227,7 +230,9 @@ fun SearchScreen(
                     onPlay = { onPlayTrack(track, filteredResults) },
                     onDownload = if (!track.isVideo) {
                         { onDownloadTrack(track) }
-                    } else null
+                    } else null,
+                    onPlayNext = { onPlayNext(track) },
+                    onAddToQueue = { onAddToQueue(track) }
                 )
             }
         }

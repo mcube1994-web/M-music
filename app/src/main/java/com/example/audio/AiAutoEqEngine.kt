@@ -1,8 +1,7 @@
 package com.example.audio
 
-import android.media.audiofx.DynamicsProcessing
-import android.media.audiofx.Equalizer
-import android.os.Build
+import androidx.annotation.OptIn
+import androidx.media3.common.util.UnstableApi
 import com.example.domain.model.AiEqMode
 import com.example.domain.model.MediaTrack
 import com.example.domain.model.MusicLanguage
@@ -19,76 +18,38 @@ data class AiEqState(
     val bandGainsDb: List<Float> = AiEqMode.SPATIAL_ATMOS.defaultGainsDb,
     val isHardwareDspAttached: Boolean = false,
     val audioSessionId: Int = 0,
-    val dspEngineName: String = "Media3 10-Band Equalizer"
+    val dspEngineName: String = "Media3 10-Band Biquad DSP"
 )
 
 /**
- * 10-Band AI Auto & Manual Equalizer (31Hz .. 16kHz) attached to Media3 ExoPlayer's audioSessionId.
- * Uses DynamicsProcessing (API 28+) or android.media.audiofx.Equalizer fallback.
+ * 10-Band AI Auto & Manual Equalizer (31Hz .. 16kHz) driving M3TenBandEqAudioProcessor
+ * directly inside Media3 ExoPlayer's AudioSink (avoiding vendor DynamicsProcessing HAL muting).
  */
+@OptIn(UnstableApi::class)
 class AiAutoEqEngine {
 
     val bandLabels = listOf("31", "62", "125", "250", "500", "1k", "2k", "4k", "8k", "16k")
-    private val bandCenterHz = floatArrayOf(31f, 62f, 125f, 250f, 500f, 1000f, 2000f, 4000f, 8000f, 16000f)
 
     private val _state = MutableStateFlow(AiEqState())
     val state: StateFlow<AiEqState> = _state.asStateFlow()
 
-    private var dynamicsProcessing: DynamicsProcessing? = null
-    private var legacyEqualizer: Equalizer? = null
+    private var eqProcessor: M3TenBandEqAudioProcessor? = null
     private var currentSessionId: Int = 0
 
+    fun bindProcessor(processor: M3TenBandEqAudioProcessor) {
+        eqProcessor = processor
+        applyCurrentBandsToDsp()
+    }
+
     fun attachToAudioSession(audioSessionId: Int) {
-        if (audioSessionId <= 0 || audioSessionId == currentSessionId) return
-        releaseDsp()
+        if (audioSessionId <= 0) return
         currentSessionId = audioSessionId
-
-        var attached = false
-        var engineName = "Media3 10-Band Equalizer"
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-            runCatching {
-                val config = DynamicsProcessing.Config.Builder(
-                    DynamicsProcessing.VARIANT_FAVOR_FREQUENCY_RESOLUTION,
-                    1,
-                    true,
-                    10,
-                    false,
-                    0,
-                    false,
-                    0,
-                    false
-                ).build()
-                val dp = DynamicsProcessing(0, audioSessionId, config)
-                dp.enabled = _state.value.isEqEnabled
-                for (i in 0 until 10) {
-                    dp.setPreEqBandAllChannelsTo(
-                        i,
-                        DynamicsProcessing.EqBand(true, bandCenterHz[i], _state.value.bandGainsDb[i])
-                    )
-                }
-                dynamicsProcessing = dp
-                attached = true
-                engineName = "Media3 DynamicsProcessing (10-Band)"
-            }
-        }
-
-        if (!attached) {
-            runCatching {
-                val eq = Equalizer(0, audioSessionId).apply {
-                    enabled = _state.value.isEqEnabled
-                }
-                legacyEqualizer = eq
-                attached = true
-                engineName = "Media3 Equalizer (${eq.numberOfBands}-Band)"
-            }
-        }
-
         _state.value = _state.value.copy(
-            isHardwareDspAttached = attached,
+            isHardwareDspAttached = eqProcessor != null || audioSessionId > 0,
             audioSessionId = audioSessionId,
-            dspEngineName = engineName
+            dspEngineName = "Media3 10-Band Biquad DSP"
         )
-        applyCurrentBandsToHardware()
+        applyCurrentBandsToDsp()
     }
 
     fun analyzeAndAdapt(
@@ -107,7 +68,7 @@ class AiAutoEqEngine {
 
         if (track.isVideo) {
             resolvedMode = AiEqMode.CINEMA_SURROUND
-            contentLabel = "Cinema Video • Auto Surround"
+            contentLabel = "Cinema Video • Clean Surround"
         } else {
             val titleAlbum = "${track.title} ${track.album} ${track.subtitle.orEmpty()}".lowercase()
             resolvedMode = when {
@@ -129,14 +90,12 @@ class AiAutoEqEngine {
             contentLabel = "Music (${track.language.label}) • ${resolvedMode.label}"
         }
 
-        val targetGains = resolvedMode.defaultGainsDb.mapIndexed { idx, base ->
-            val dynamicOffset = when (idx) {
-                0, 1 -> if (telemetry.subBassEnergy < 0.18f && !track.isLossless) 0.6f else 0f
-                5, 6 -> if (telemetry.vocalEnergy < 0.2f) 0.5f else 0f
-                8, 9 -> if (telemetry.brillianceEnergy < 0.15f) 0.7f else 0f
-                else -> 0f
-            }
-            (base + dynamicOffset).coerceIn(-12f, 12f)
+        val targetGains = resolvedMode.defaultGainsDb
+        if (current.activeResolvedMode == resolvedMode &&
+            current.detectedContentLabel == contentLabel &&
+            current.bandGainsDb == targetGains
+        ) {
+            return
         }
 
         _state.value = current.copy(
@@ -144,20 +103,12 @@ class AiAutoEqEngine {
             detectedContentLabel = contentLabel,
             bandGainsDb = targetGains
         )
-        applyCurrentBandsToHardware()
+        applyCurrentBandsToDsp()
     }
 
     fun setEqEnabled(enabled: Boolean) {
         _state.value = _state.value.copy(isEqEnabled = enabled)
-        runCatching {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-                dynamicsProcessing?.enabled = enabled
-            }
-            legacyEqualizer?.enabled = enabled
-        }
-        if (enabled) {
-            applyCurrentBandsToHardware()
-        }
+        applyCurrentBandsToDsp()
     }
 
     fun selectMode(mode: AiEqMode) {
@@ -171,13 +122,7 @@ class AiAutoEqEngine {
             bandGainsDb = gains,
             detectedContentLabel = if (auto) "AI Auto Active" else "${mode.label} Preset"
         )
-        runCatching {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-                dynamicsProcessing?.enabled = true
-            }
-            legacyEqualizer?.enabled = true
-        }
-        applyCurrentBandsToHardware()
+        applyCurrentBandsToDsp()
     }
 
     fun setBandGain(bandIndex: Int, gainDb: Float) {
@@ -189,9 +134,9 @@ class AiAutoEqEngine {
             isAutoEnabled = false,
             selectedMode = AiEqMode.FLAT_HIFI,
             bandGainsDb = updated,
-            detectedContentLabel = "Custom 10-Band Tuning"
+            detectedContentLabel = "Custom 10-Band Biquad EQ"
         )
-        applyCurrentBandsToHardware()
+        applyCurrentBandsToDsp()
     }
 
     fun resetToFlat() {
@@ -203,46 +148,15 @@ class AiAutoEqEngine {
             bandGainsDb = List(10) { 0f },
             detectedContentLabel = "Flat Hi-Fi (0.0 dB)"
         )
-        applyCurrentBandsToHardware()
+        applyCurrentBandsToDsp()
     }
 
-    private fun applyCurrentBandsToHardware() {
-        val gains = _state.value.bandGainsDb
-        val enabled = _state.value.isEqEnabled
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-            dynamicsProcessing?.let { dp ->
-                runCatching {
-                    dp.enabled = enabled
-                    for (i in 0 until 10) {
-                        dp.setPreEqBandAllChannelsTo(
-                            i,
-                            DynamicsProcessing.EqBand(enabled, bandCenterHz[i], gains[i])
-                        )
-                    }
-                }
-            }
-        }
-        legacyEqualizer?.let { eq ->
-            runCatching {
-                eq.enabled = enabled
-                val numBands = eq.numberOfBands.toInt()
-                val minLevel = eq.bandLevelRange[0]
-                val maxLevel = eq.bandLevelRange[1]
-                for (b in 0 until numBands) {
-                    val mappedIdx = ((b.toFloat() / numBands) * 10).toInt().coerceIn(0, 9)
-                    val millibels = (gains[mappedIdx] * 100f).toInt()
-                        .coerceIn(minLevel.toInt(), maxLevel.toInt()).toShort()
-                    eq.setBandLevel(b.toShort(), millibels)
-                }
-            }
-        }
+    private fun applyCurrentBandsToDsp() {
+        val st = _state.value
+        eqProcessor?.updateSettings(st.isEqEnabled, st.bandGainsDb)
     }
 
     fun releaseDsp() {
-        runCatching { dynamicsProcessing?.release() }
-        runCatching { legacyEqualizer?.release() }
-        dynamicsProcessing = null
-        legacyEqualizer = null
         currentSessionId = 0
         _state.value = _state.value.copy(isHardwareDspAttached = false, audioSessionId = 0)
     }

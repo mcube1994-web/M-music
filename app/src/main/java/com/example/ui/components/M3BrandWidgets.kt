@@ -25,6 +25,9 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.PlaylistAdd
+import androidx.compose.material.icons.automirrored.rounded.PlaylistPlay
+import androidx.compose.material.icons.automirrored.rounded.QueueMusic
 import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.Download
 import androidx.compose.material.icons.rounded.DownloadDone
@@ -242,6 +245,7 @@ fun PersistentMiniPlayer(
     aiEqState: AiEqState,
     onTogglePlayPause: () -> Unit,
     onSkipNext: () -> Unit,
+    onOpenQueue: () -> Unit,
     onExpandStudio: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -286,7 +290,11 @@ fun PersistentMiniPlayer(
 
             Spacer(modifier = Modifier.width(10.dp))
 
-            Column(modifier = Modifier.weight(1f)) {
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .testTag("mini_player_info")
+            ) {
                 Text(
                     text = track.title,
                     style = MaterialTheme.typography.titleSmall,
@@ -333,6 +341,19 @@ fun PersistentMiniPlayer(
             }
 
             IconButton(
+                onClick = onOpenQueue,
+                modifier = Modifier
+                    .minimumInteractiveComponentSize()
+                    .testTag("mini_player_queue_btn")
+            ) {
+                Icon(
+                    imageVector = Icons.AutoMirrored.Rounded.QueueMusic,
+                    contentDescription = "Open Up Next Queue",
+                    tint = secondary
+                )
+            }
+
+            IconButton(
                 onClick = onTogglePlayPause,
                 modifier = Modifier
                     .minimumInteractiveComponentSize()
@@ -368,6 +389,8 @@ fun TrackRowCard(
     isSavedInVault: Boolean,
     onPlay: () -> Unit,
     onDownload: (() -> Unit)? = null,
+    onPlayNext: (() -> Unit)? = null,
+    onAddToQueue: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val primary = MaterialTheme.colorScheme.primary
@@ -463,6 +486,82 @@ fun TrackRowCard(
                         contentDescription = if (isSavedInVault) "Saved in Offline Vault" else "Save to Offline Vault",
                         tint = if (isSavedInVault) EmeraldVault else TextSecondary
                     )
+                }
+            }
+        }
+
+        if (onPlayNext != null || onAddToQueue != null) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(start = 10.dp, end = 10.dp, bottom = 10.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                if (onPlayNext != null) {
+                    Surface(
+                        modifier = Modifier
+                            .weight(1f)
+                            .clip(RoundedCornerShape(10.dp))
+                            .clickable(onClick = onPlayNext)
+                            .minimumInteractiveComponentSize()
+                            .testTag("play_next_btn_${track.id}"),
+                        shape = RoundedCornerShape(10.dp),
+                        color = primary.copy(alpha = 0.14f),
+                        border = BorderStroke(0.5.dp, primary.copy(alpha = 0.4f))
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Rounded.PlaylistPlay,
+                                contentDescription = "Play Next",
+                                tint = primary,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(5.dp))
+                            Text(
+                                text = "Play Next",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = TextPrimary,
+                                maxLines = 1
+                            )
+                        }
+                    }
+                }
+                if (onAddToQueue != null) {
+                    Surface(
+                        modifier = Modifier
+                            .weight(1f)
+                            .clip(RoundedCornerShape(10.dp))
+                            .clickable(onClick = onAddToQueue)
+                            .minimumInteractiveComponentSize()
+                            .testTag("add_to_queue_btn_${track.id}"),
+                        shape = RoundedCornerShape(10.dp),
+                        color = secondary.copy(alpha = 0.14f),
+                        border = BorderStroke(0.5.dp, secondary.copy(alpha = 0.4f))
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Rounded.PlaylistAdd,
+                                contentDescription = "Add to Queue",
+                                tint = secondary,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(5.dp))
+                            Text(
+                                text = "Add to Queue",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = TextPrimary,
+                                maxLines = 1
+                            )
+                        }
+                    }
                 }
             }
         }

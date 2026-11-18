@@ -1,10 +1,22 @@
 package com.example.ui
 
+import android.app.Activity
+import android.content.Context
+import android.content.ContextWrapper
+import android.content.pm.ActivityInfo
+import android.content.res.Configuration
+import android.os.Build
+import android.view.View
+import android.view.WindowManager
+import android.webkit.WebChromeClient
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -17,18 +29,24 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Download
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.Language
 import androidx.compose.material.icons.outlined.Movie
 import androidx.compose.material.icons.outlined.Search
+import androidx.compose.material.icons.rounded.AspectRatio
 import androidx.compose.material.icons.rounded.Download
+import androidx.compose.material.icons.rounded.FullscreenExit
 import androidx.compose.material.icons.rounded.Home
 import androidx.compose.material.icons.rounded.Language
 import androidx.compose.material.icons.rounded.Movie
+import androidx.compose.material.icons.rounded.ScreenRotation
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
@@ -40,19 +58,37 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
+import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.material3.windowsizeclass.WindowWidthSizeClass
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.viewinterop.AndroidView
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.media3.common.util.UnstableApi
+import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.ui.AspectRatioFrameLayout
+import androidx.media3.ui.PlayerView
 import com.example.domain.model.AppTab
 import com.example.domain.model.VisualizerMode
 import com.example.ui.components.AppearanceSkinDialog
@@ -62,11 +98,13 @@ import com.example.ui.components.M3LogoBadge
 import com.example.ui.components.NavidromeDialog
 import com.example.ui.components.PersistentMiniPlayer
 import com.example.ui.components.StudioPlayerSheet
+import com.example.ui.components.UpNextQueueSheet
 import com.example.ui.screens.DownloadVaultScreen
 import com.example.ui.screens.HomeScreen
 import com.example.ui.screens.SearchScreen
 import com.example.ui.screens.VideoPlayerScreen
 import com.example.ui.screens.WebMoviesScreen
+import com.example.ui.theme.SpatialCyan
 import com.example.ui.theme.TextPrimary
 import com.example.ui.theme.TextSecondary
 
@@ -99,12 +137,67 @@ fun M3RootApp(
     val showNavidromeDialog by viewModel.showNavidromeDialog.collectAsStateWithLifecycle()
     val showAppearanceDialog by viewModel.showAppearanceDialog.collectAsStateWithLifecycle()
     val showEqualizerDialog by viewModel.showEqualizerDialog.collectAsStateWithLifecycle()
+    val showQueueSheet by viewModel.showQueueSheet.collectAsStateWithLifecycle()
+    val isVideoFullscreen by viewModel.isVideoFullscreen.collectAsStateWithLifecycle()
     val toastMessage by viewModel.toastMessage.collectAsStateWithLifecycle()
 
+    val context = LocalContext.current
+    val activity = remember(context) { context.findActivity() }
+    val configuration = LocalConfiguration.current
     val snackbarHostState = remember { SnackbarHostState() }
+    val videoListState = rememberLazyListState()
     val vaultIds = remember(vaultTracks) { vaultTracks.map { it.id }.toSet() }
     val useRail = widthSizeClass != WindowWidthSizeClass.Compact
     val colorScheme = MaterialTheme.colorScheme
+    var webCustomFullscreen by remember {
+        mutableStateOf<Pair<View, WebChromeClient.CustomViewCallback>?>(null)
+    }
+
+    var lastOrientation by remember { mutableIntStateOf(configuration.orientation) }
+    LaunchedEffect(configuration.orientation, activeTab, playbackState.currentTrack?.isVideo) {
+        val currentOrientation = configuration.orientation
+        if (currentOrientation != lastOrientation) {
+            if (activeTab == AppTab.VIDEO_PLAYER && playbackState.currentTrack?.isVideo == true) {
+                if (currentOrientation == Configuration.ORIENTATION_LANDSCAPE) {
+                    viewModel.setVideoFullscreen(true)
+                } else if (currentOrientation == Configuration.ORIENTATION_PORTRAIT && isVideoFullscreen) {
+                    viewModel.setVideoFullscreen(false)
+                }
+            }
+            lastOrientation = currentOrientation
+        }
+    }
+
+    LaunchedEffect(activeTab, isVideoFullscreen, webCustomFullscreen) {
+        if (webCustomFullscreen == null && !isVideoFullscreen && activeTab != AppTab.VIDEO_PLAYER) {
+            activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+        }
+    }
+
+    val enterVideoFullscreen: () -> Unit = {
+        viewModel.setVideoFullscreen(true)
+        activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+    }
+    val exitVideoFullscreen: () -> Unit = {
+        viewModel.setVideoFullscreen(false)
+        activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+    }
+    val toggleVideoRotation: () -> Unit = {
+        val isCurrentlyLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
+        if (isCurrentlyLandscape) {
+            activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+            viewModel.setVideoFullscreen(false)
+        } else {
+            activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+            viewModel.setVideoFullscreen(true)
+        }
+    }
+    val exitWebVideoFullscreen: () -> Unit = {
+        val current = webCustomFullscreen
+        webCustomFullscreen = null
+        current?.second?.onCustomViewHidden()
+        activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+    }
 
     LaunchedEffect(toastMessage) {
         val msg = toastMessage
@@ -123,8 +216,17 @@ fun M3RootApp(
     }
 
     // Back button returns non-Home tabs back to Home cleanly
-    BackHandler(enabled = activeTab != AppTab.HOME && !isStudioExpanded) {
+    BackHandler(enabled = activeTab != AppTab.HOME && !isStudioExpanded && !showQueueSheet && !isVideoFullscreen && webCustomFullscreen == null) {
         viewModel.selectTab(AppTab.HOME)
+    }
+
+    if (isVideoFullscreen && playbackState.currentTrack?.isVideo == true) {
+        FullscreenVideoPlayerOverlay(
+            exoPlayer = viewModel.playerController.exoPlayer,
+            onToggleRotation = toggleVideoRotation,
+            onExitFullscreen = exitVideoFullscreen
+        )
+        return
     }
 
     Box(
@@ -155,6 +257,7 @@ fun M3RootApp(
                                 aiEqState = aiEqState,
                                 onTogglePlayPause = { viewModel.playerController.togglePlayPause() },
                                 onSkipNext = { viewModel.playerController.skipNext() },
+                                onOpenQueue = { viewModel.setQueueSheetVisible(true) },
                                 onExpandStudio = { viewModel.setStudioExpanded(true) },
                                 modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
                             )
@@ -285,6 +388,8 @@ fun M3RootApp(
                             onClearSearch = { viewModel.clearHomeSearch() },
                             onSelectLanguage = { viewModel.selectHomeLanguage(it) },
                             onPlayTrack = { track -> viewModel.playTrack(track, homeState.songs) },
+                            onPlayNextTrack = { track -> viewModel.playNext(track) },
+                            onAddTrackToQueue = { track -> viewModel.addToQueue(track) },
                             onDownloadTrack = { track -> viewModel.downloadTrackToVault(track) },
                             onCycleVisualizerMode = {
                                 val modes = VisualizerMode.entries
@@ -324,13 +429,17 @@ fun M3RootApp(
                             curatedVideos = curatedVideos,
                             audioTrackOptions = playbackState.audioTracks,
                             aiEqState = aiEqState,
+                            isVideoFullscreen = isVideoFullscreen,
                             onPlayVideo = { video -> viewModel.playTrack(video, curatedVideos) },
                             onPlayStreamUrl = { url -> viewModel.playVideoUrl(url) },
                             onSelectAudioTrack = { opt -> viewModel.selectAudioTrack(opt) },
                             onImportLocalVideo = { uri -> viewModel.importLocalMedia(uri, isVideo = true) },
+                            onEnterFullscreen = enterVideoFullscreen,
+                            onToggleRotation = toggleVideoRotation,
                             onOpenDolbySheet = { viewModel.setDolbySheetVisible(true) },
                             onOpenEqualizerDialog = { viewModel.setEqualizerDialogVisible(true) },
-                            modifier = contentModifier
+                            modifier = contentModifier,
+                            listState = videoListState
                         )
 
                         AppTab.WEB_MOVIES -> WebMoviesScreen(
@@ -339,6 +448,11 @@ fun M3RootApp(
                             onUrlLoaded = { url, title, loading -> viewModel.updateWebUrl(url, title, loading) },
                             onStreamDetected = { streamUrl -> viewModel.registerDetectedWebStream(streamUrl) },
                             onPlayInM3Player = { streamUrl, title -> viewModel.playVideoUrl(streamUrl, title) },
+                            onEnterWebVideoFullscreen = { customView, callback ->
+                                webCustomFullscreen = customView to callback
+                                activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+                            },
+                            onExitWebVideoFullscreen = exitWebVideoFullscreen,
                             modifier = contentModifier
                         )
 
@@ -364,6 +478,8 @@ fun M3RootApp(
                             onSelectBackendFilter = { viewModel.setSearchBackendFilter(it) },
                             onRemoveRecent = { viewModel.removeRecentSearch(it) },
                             onPlayTrack = { track, queue -> viewModel.playTrack(track, queue) },
+                            onPlayNext = { track -> viewModel.playNext(track) },
+                            onAddToQueue = { track -> viewModel.addToQueue(track) },
                             onDownloadTrack = { viewModel.downloadTrackToVault(it) },
                             modifier = contentModifier
                         )
@@ -377,6 +493,7 @@ fun M3RootApp(
                             aiEqState = aiEqState,
                             onTogglePlayPause = { viewModel.playerController.togglePlayPause() },
                             onSkipNext = { viewModel.playerController.skipNext() },
+                            onOpenQueue = { viewModel.setQueueSheetVisible(true) },
                             onExpandStudio = { viewModel.setStudioExpanded(true) },
                             modifier = Modifier
                                 .align(Alignment.BottomCenter)
@@ -408,6 +525,9 @@ fun M3RootApp(
                 onSkipNext = { viewModel.playerController.skipNext() },
                 onSkipPrevious = { viewModel.playerController.skipPrevious() },
                 onSeekTo = { viewModel.playerController.seekTo(it) },
+                onToggleShuffle = { viewModel.toggleShuffle() },
+                onCycleRepeat = { viewModel.cycleRepeatMode() },
+                onOpenQueue = { viewModel.setQueueSheetVisible(true) },
                 onSelectVisualizerMode = { viewModel.setVisualizerMode(it) },
                 onSelectVisualizerPalette = { viewModel.setVisualizerPalette(it) },
                 onToggleEqEnabled = { viewModel.setEqEnabled(it) },
@@ -416,6 +536,22 @@ fun M3RootApp(
                 onResetEqFlat = { viewModel.resetEqFlat() },
                 onOpenDolbyDiagnostics = { viewModel.setDolbySheetVisible(true) },
                 onOpenAppearanceDialog = { viewModel.setAppearanceDialogVisible(true) }
+            )
+        }
+
+        if (showQueueSheet) {
+            UpNextQueueSheet(
+                currentTrack = playbackState.currentTrack,
+                queue = playbackState.queue,
+                currentIndex = playbackState.currentIndex,
+                shuffleEnabled = playbackState.shuffleEnabled,
+                repeatMode = playbackState.repeatMode,
+                onJumpToIndex = { index -> viewModel.jumpToQueueIndex(index) },
+                onRemoveAt = { index -> viewModel.removeFromQueue(index) },
+                onClearQueue = { viewModel.clearQueue() },
+                onToggleShuffle = { viewModel.toggleShuffle() },
+                onCycleRepeat = { viewModel.cycleRepeatMode() },
+                onDismiss = { viewModel.setQueueSheetVisible(false) }
             )
         }
 
@@ -453,6 +589,14 @@ fun M3RootApp(
             )
         }
 
+        // HTML5 WebView Fullscreen Video Overlay (rotated landscape, video only)
+        webCustomFullscreen?.let { (customView, _) ->
+            FullscreenWebVideoOverlay(
+                customView = customView,
+                onExitFullscreen = exitWebVideoFullscreen
+            )
+        }
+
         if (showNavidromeDialog) {
             NavidromeDialog(
                 initialConfig = navidromeConfig,
@@ -461,6 +605,212 @@ fun M3RootApp(
             )
         }
     }
+}
+
+@androidx.annotation.OptIn(UnstableApi::class)
+@Composable
+private fun FullscreenVideoPlayerOverlay(
+    exoPlayer: ExoPlayer,
+    onToggleRotation: () -> Unit,
+    onExitFullscreen: () -> Unit
+) {
+    val view = LocalView.current
+    val activity = remember(view) { view.context.findActivity() }
+    var areControlsVisible by remember { mutableStateOf(true) }
+    var useZoomFill by remember { mutableStateOf(false) }
+
+    BackHandler(onBack = onExitFullscreen)
+
+    DisposableEffect(activity, view) {
+        val window = activity?.window
+        val prevCutoutMode = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P && window != null) {
+            val prev = window.attributes.layoutInDisplayCutoutMode
+            window.attributes = window.attributes.apply {
+                layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
+            }
+            prev
+        } else 0
+
+        activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+        val controller = window?.let { WindowCompat.getInsetsController(it, view) }
+        controller?.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+        controller?.hide(WindowInsetsCompat.Type.systemBars())
+
+        onDispose {
+            controller?.show(WindowInsetsCompat.Type.systemBars())
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P && window != null) {
+                window.attributes = window.attributes.apply {
+                    layoutInDisplayCutoutMode = prevCutoutMode
+                }
+            }
+        }
+    }
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.Black)
+            .testTag("video_fullscreen_overlay")
+    ) {
+        AndroidView(
+            factory = { ctx ->
+                PlayerView(ctx).apply {
+                    useController = true
+                    resizeMode = if (useZoomFill) {
+                        AspectRatioFrameLayout.RESIZE_MODE_ZOOM
+                    } else {
+                        AspectRatioFrameLayout.RESIZE_MODE_FIT
+                    }
+                    player = exoPlayer
+                    setFullscreenButtonState(true)
+                    setFullscreenButtonClickListener { _ ->
+                        onExitFullscreen()
+                    }
+                    setControllerVisibilityListener(
+                        PlayerView.ControllerVisibilityListener { visibility ->
+                            areControlsVisible = visibility == View.VISIBLE
+                        }
+                    )
+                }
+            },
+            update = { playerView ->
+                if (playerView.player !== exoPlayer) {
+                    playerView.player = exoPlayer
+                }
+                playerView.resizeMode = if (useZoomFill) {
+                    AspectRatioFrameLayout.RESIZE_MODE_ZOOM
+                } else {
+                    AspectRatioFrameLayout.RESIZE_MODE_FIT
+                }
+                playerView.setFullscreenButtonState(true)
+                playerView.setFullscreenButtonClickListener { _ ->
+                    onExitFullscreen()
+                }
+                playerView.setControllerVisibilityListener(
+                    PlayerView.ControllerVisibilityListener { visibility ->
+                        areControlsVisible = visibility == View.VISIBLE
+                    }
+                )
+            },
+            onRelease = { playerView ->
+                playerView.setControllerVisibilityListener(null as PlayerView.ControllerVisibilityListener?)
+                playerView.player = null
+            },
+            modifier = Modifier.fillMaxSize()
+        )
+
+        AnimatedVisibility(
+            visible = areControlsVisible,
+            enter = fadeIn(),
+            exit = fadeOut(),
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .windowInsetsPadding(WindowInsets.safeDrawing)
+                .padding(12.dp)
+        ) {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                IconButton(
+                    onClick = { useZoomFill = !useZoomFill },
+                    modifier = Modifier
+                        .clip(CircleShape)
+                        .background(Color.Black.copy(alpha = 0.65f))
+                        .minimumInteractiveComponentSize()
+                        .testTag("video_fullscreen_resize_btn")
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.AspectRatio,
+                        contentDescription = if (useZoomFill) "Fit Video" else "Fill Screen",
+                        tint = if (useZoomFill) SpatialCyan else TextPrimary
+                    )
+                }
+                IconButton(
+                    onClick = onToggleRotation,
+                    modifier = Modifier
+                        .clip(CircleShape)
+                        .background(Color.Black.copy(alpha = 0.65f))
+                        .minimumInteractiveComponentSize()
+                        .testTag("video_fullscreen_rotate_btn")
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.ScreenRotation,
+                        contentDescription = "Rotate Video Orientation",
+                        tint = TextPrimary
+                    )
+                }
+                IconButton(
+                    onClick = onExitFullscreen,
+                    modifier = Modifier
+                        .clip(CircleShape)
+                        .background(Color.Black.copy(alpha = 0.65f))
+                        .minimumInteractiveComponentSize()
+                        .testTag("video_exit_fullscreen_btn")
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.FullscreenExit,
+                        contentDescription = "Exit Fullscreen Video",
+                        tint = SpatialCyan
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun FullscreenWebVideoOverlay(
+    customView: View,
+    onExitFullscreen: () -> Unit
+) {
+    val view = LocalView.current
+    val activity = remember(view) { view.context.findActivity() }
+
+    BackHandler(onBack = onExitFullscreen)
+
+    DisposableEffect(activity, view) {
+        val window = activity?.window
+        val prevCutoutMode = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P && window != null) {
+            val prev = window.attributes.layoutInDisplayCutoutMode
+            window.attributes = window.attributes.apply {
+                layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
+            }
+            prev
+        } else 0
+
+        activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+        val controller = window?.let { WindowCompat.getInsetsController(it, view) }
+        controller?.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+        controller?.hide(WindowInsetsCompat.Type.systemBars())
+
+        onDispose {
+            controller?.show(WindowInsetsCompat.Type.systemBars())
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P && window != null) {
+                window.attributes = window.attributes.apply {
+                    layoutInDisplayCutoutMode = prevCutoutMode
+                }
+            }
+        }
+    }
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.Black)
+            .testTag("web_video_fullscreen_overlay")
+    ) {
+        AndroidView(
+            factory = { customView },
+            onRelease = { v ->
+                (v.parent as? android.view.ViewGroup)?.removeView(v)
+            },
+            modifier = Modifier.fillMaxSize()
+        )
+    }
+}
+
+private tailrec fun Context.findActivity(): Activity? = when (this) {
+    is Activity -> this
+    is ContextWrapper -> baseContext.findActivity()
+    else -> null
 }
 
 private fun tabIcons(tab: AppTab): Pair<ImageVector, ImageVector> = when (tab) {

@@ -27,6 +27,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.QueueMusic
 import androidx.compose.material.icons.rounded.Fullscreen
 import androidx.compose.material.icons.rounded.FullscreenExit
 import androidx.compose.material.icons.rounded.KeyboardArrowDown
@@ -35,6 +36,9 @@ import androidx.compose.material.icons.rounded.OpenInNew
 import androidx.compose.material.icons.rounded.Palette
 import androidx.compose.material.icons.rounded.Pause
 import androidx.compose.material.icons.rounded.PlayArrow
+import androidx.compose.material.icons.rounded.Repeat
+import androidx.compose.material.icons.rounded.RepeatOne
+import androidx.compose.material.icons.rounded.Shuffle
 import androidx.compose.material.icons.rounded.SkipNext
 import androidx.compose.material.icons.rounded.SkipPrevious
 import androidx.compose.material.icons.rounded.SurroundSound
@@ -68,6 +72,7 @@ import coil.compose.AsyncImage
 import com.example.audio.AiEqState
 import com.example.audio.VisualizerTelemetry
 import com.example.domain.model.AiEqMode
+import com.example.domain.model.RepeatMode
 import com.example.domain.model.SyncedLyricLine
 import com.example.domain.model.VisualizerMode
 import com.example.domain.model.VisualizerPalette
@@ -90,6 +95,9 @@ fun StudioPlayerSheet(
     onSkipNext: () -> Unit,
     onSkipPrevious: () -> Unit,
     onSeekTo: (Long) -> Unit,
+    onToggleShuffle: () -> Unit,
+    onCycleRepeat: () -> Unit,
+    onOpenQueue: () -> Unit,
     onSelectVisualizerMode: (VisualizerMode) -> Unit,
     onSelectVisualizerPalette: (VisualizerPalette) -> Unit,
     onToggleEqEnabled: (Boolean) -> Unit,
@@ -544,26 +552,37 @@ fun StudioPlayerSheet(
 
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.Center,
+                    horizontalArrangement = Arrangement.SpaceEvenly,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     IconButton(
+                        onClick = onToggleShuffle,
+                        modifier = Modifier
+                            .minimumInteractiveComponentSize()
+                            .testTag("studio_shuffle_btn")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Rounded.Shuffle,
+                            contentDescription = "Toggle Shuffle",
+                            tint = if (playbackState.shuffleEnabled) colorScheme.secondary else TextSecondary
+                        )
+                    }
+                    IconButton(
                         onClick = onSkipPrevious,
                         modifier = Modifier
-                            .size(56.dp)
+                            .size(52.dp)
                             .testTag("studio_prev_button")
                     ) {
                         Icon(
                             imageVector = Icons.Rounded.SkipPrevious,
                             contentDescription = "Previous",
                             tint = TextPrimary,
-                            modifier = Modifier.size(34.dp)
+                            modifier = Modifier.size(32.dp)
                         )
                     }
-                    Spacer(modifier = Modifier.width(20.dp))
                     Surface(
                         modifier = Modifier
-                            .size(68.dp)
+                            .size(66.dp)
                             .clip(CircleShape)
                             .clickable(onClick = onTogglePlayPause)
                             .testTag("studio_play_pause_button"),
@@ -576,23 +595,74 @@ fun StudioPlayerSheet(
                                 imageVector = if (playbackState.isPlaying) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
                                 contentDescription = if (playbackState.isPlaying) "Pause" else "Play",
                                 tint = TextPrimary,
-                                modifier = Modifier.size(36.dp)
+                                modifier = Modifier.size(34.dp)
                             )
                         }
                     }
-                    Spacer(modifier = Modifier.width(20.dp))
                     IconButton(
                         onClick = onSkipNext,
                         modifier = Modifier
-                            .size(56.dp)
+                            .size(52.dp)
                             .testTag("studio_next_button")
                     ) {
                         Icon(
                             imageVector = Icons.Rounded.SkipNext,
                             contentDescription = "Next",
                             tint = TextPrimary,
-                            modifier = Modifier.size(34.dp)
+                            modifier = Modifier.size(32.dp)
                         )
+                    }
+                    IconButton(
+                        onClick = onCycleRepeat,
+                        modifier = Modifier
+                            .minimumInteractiveComponentSize()
+                            .testTag("studio_repeat_btn")
+                    ) {
+                        Icon(
+                            imageVector = if (playbackState.repeatMode == RepeatMode.REPEAT_ONE) {
+                                Icons.Rounded.RepeatOne
+                            } else {
+                                Icons.Rounded.Repeat
+                            },
+                            contentDescription = playbackState.repeatMode.label,
+                            tint = if (playbackState.repeatMode != RepeatMode.OFF) colorScheme.secondary else TextSecondary
+                        )
+                    }
+                }
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 6.dp),
+                    horizontalArrangement = Arrangement.Center
+                ) {
+                    Surface(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(10.dp))
+                            .clickable(onClick = onOpenQueue)
+                            .minimumInteractiveComponentSize()
+                            .testTag("studio_queue_btn"),
+                        shape = RoundedCornerShape(10.dp),
+                        color = colorScheme.surfaceVariant,
+                        border = BorderStroke(0.5.dp, colorScheme.outline)
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Rounded.QueueMusic,
+                                contentDescription = "Open Up Next Queue",
+                                tint = colorScheme.secondary,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Text(
+                                text = "Up Next (${playbackState.queue.size})",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = TextPrimary
+                            )
+                        }
                     }
                 }
             }

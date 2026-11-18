@@ -105,6 +105,8 @@ fun HomeScreen(
     onClearSearch: () -> Unit,
     onSelectLanguage: (MusicLanguage) -> Unit,
     onPlayTrack: (MediaTrack) -> Unit,
+    onPlayNextTrack: (MediaTrack) -> Unit = {},
+    onAddTrackToQueue: (MediaTrack) -> Unit = {},
     onDownloadTrack: (MediaTrack) -> Unit,
     onCycleVisualizerMode: () -> Unit,
     onSelectLiveVizzFm: () -> Unit,
@@ -639,7 +641,7 @@ fun HomeScreen(
                     ) {
                         CircularProgressIndicator(color = colorScheme.secondary)
                         Text(
-                            text = "Fetching streams from JioSaavn, iTunes, Audius & Archive...",
+                            text = "Fetching streams from JioSaavn, Audius & Archive...",
                             style = MaterialTheme.typography.bodySmall,
                             color = TextSecondary
                         )
@@ -669,7 +671,9 @@ fun HomeScreen(
                     isActive = currentTrack?.id == track.id,
                     isSavedInVault = vaultIds.contains(track.id),
                     onPlay = { onPlayTrack(track) },
-                    onDownload = { onDownloadTrack(track) }
+                    onDownload = { onDownloadTrack(track) },
+                    onPlayNext = { onPlayNextTrack(track) },
+                    onAddToQueue = { onAddTrackToQueue(track) }
                 )
             }
         }
