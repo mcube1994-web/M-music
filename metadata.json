@@ -1,0 +1,6 @@
+{
+  "name": "m³ music player",
+  "description": "Free open-source music and video streaming player with Indian Regional & Global streaming, Winamp visualizers, AI Auto 10-band EQ, Media3 HLS/Dolby Video Player, Web Movies bridge, and Lossless FLAC Offline Vault.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- Soft Glassmorphic Inner Halo inside 66dp safe zone -->
+    <path
+        android:pathData="M 54,22 A 32,32 0 1,1 53.99,22 Z"
+        android:fillColor="#1622D3EE"
+        android:strokeColor="#557C6BFF"
+        android:strokeWidth="1.4" />
+
+    <!-- Spatial Cyan Outer Soundwave Arc -->
+    <path
+        android:pathData="M 26,39 A 32,32 0 0,1 78,33"
+        android:strokeColor="#AA22D3EE"
+        android:strokeWidth="2.0"
+        android:strokeLineCap="round" />
+
+    <path
+        android:pathData="M 82,69 A 32,32 0 0,1 30,75"
+        android:strokeColor="#AA9E92FF"
+        android:strokeWidth="2.0"
+        android:strokeLineCap="round" />
+
+    <!-- Cyan Glow Shadow under 'm' -->
+    <path
+        android:pathData="M 33,67 L 33,51 C 33,44.5 44.5,44.5 44.5,51 L 44.5,67 M 44.5,51 C 44.5,44.5 56,44.5 56,51 L 56,67"
+        android:strokeColor="#4422D3EE"
+        android:strokeWidth="8.0"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+
+    <!-- Crisp White Geometric 'm' -->
+    <path
+        android:pathData="M 33,67 L 33,51 C 33,44.5 44.5,44.5 44.5,51 L 44.5,67 M 44.5,51 C 44.5,44.5 56,44.5 56,51 L 56,67"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="5.6"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+
+    <!-- Glowing Violet Halo under superscript '3' -->
+    <path
+        android:pathData="M 63.5,39.5 C 66,36.8 73,36.8 73,40.8 C 73,43.5 69.5,44.6 66.5,44.6 C 70,44.6 74,45.8 74,49 C 74,52.8 66,53.2 63,50.6"
+        android:strokeColor="#557C6BFF"
+        android:strokeWidth="5.4"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+
+    <!-- Bright Spatial Cyan Superscript '3' -->
+    <path
+        android:pathData="M 63.5,39.5 C 66,36.8 73,36.8 73,40.8 C 73,43.5 69.5,44.6 66.5,44.6 C 70,44.6 74,45.8 74,49 C 74,52.8 66,53.2 63,50.6"
+        android:strokeColor="#22D3EE"
+        android:strokeWidth="3.4"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+</vector>
