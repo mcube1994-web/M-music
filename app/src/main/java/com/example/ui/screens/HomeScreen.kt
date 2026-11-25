@@ -160,14 +160,14 @@ fun HomeScreen(
                     M3LogoBadge(size = 44.dp, isActive = isPlaying || isSweepPlaying)
                     Column {
                         Text(
-                            text = "m³ music player",
+                            text = "M³ REBORN",
                             style = MaterialTheme.typography.titleLarge,
                             color = TextPrimary,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )
                         Text(
-                            text = "${appearanceSkin.label} • Hi-Fi",
+                            text = "MUSIC • MOVIES • MIND",
                             style = MaterialTheme.typography.labelSmall,
                             color = colorScheme.secondary,
                             maxLines = 1,
