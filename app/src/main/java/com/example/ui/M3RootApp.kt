@@ -470,6 +470,7 @@ fun M3RootApp(
                             onOpenNavidromeDialog = { viewModel.setNavidromeDialogVisible(true) },
                             onToggleSpatializer = { viewModel.setSpatializerEffectEnabled(it) },
                             onImportLocalAudio = { uri -> viewModel.importLocalMedia(uri, isVideo = false) },
+                            onScanLocalAudio = { viewModel.scanLocalAudioLibrary() },
                             modifier = contentModifier
                         )
 
