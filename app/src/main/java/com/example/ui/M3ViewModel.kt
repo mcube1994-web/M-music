@@ -1,6 +1,8 @@
 package com.example.ui
 
 import android.app.Application
+import android.content.ContentUris
+import android.provider.MediaStore
 import android.net.Uri
 import androidx.annotation.OptIn
 import androidx.lifecycle.AndroidViewModel
@@ -167,6 +169,7 @@ class M3ViewModel(application: Application) : AndroidViewModel(application) {
     val isVideoFullscreen: StateFlow<Boolean> = _isVideoFullscreen.asStateFlow()
 
     private val _homeState = MutableStateFlow(HomeUiState())
+    private val _localAudioTracks = MutableStateFlow<List<MediaTrack>>(emptyList())
     val homeState: StateFlow<HomeUiState> = _homeState.asStateFlow()
 
     private val _searchState = MutableStateFlow(SearchUiState())
@@ -392,11 +395,78 @@ class M3ViewModel(application: Application) : AndroidViewModel(application) {
 
             _homeState.value = _homeState.value.copy(
                 isLoading = false,
-                songs = results,
+                songs = _localAudioTracks.value + results,
                 statusBanner = if (results.isEmpty()) {
                     "No online tracks returned for '${st.songSearchQuery.ifBlank { st.selectedLanguage.label }}'. Try another query or import local FLAC/MP3."
                 } else null
             )
+        }
+    }
+
+
+    fun scanLocalAudioLibrary() {
+        viewModelScope.launch {
+            val resolver = getApplication<Application>().contentResolver
+            val collection = MediaStore.Audio.Media.EXTERNAL_CONTENT_URI
+            val projection = arrayOf(
+                MediaStore.Audio.Media._ID,
+                MediaStore.Audio.Media.TITLE,
+                MediaStore.Audio.Media.ARTIST,
+                MediaStore.Audio.Media.ALBUM,
+                MediaStore.Audio.Media.DURATION,
+                MediaStore.Audio.Media.MIME_TYPE
+            )
+            val scanned = runCatching {
+                resolver.query(
+                    collection,
+                    projection,
+                    "${MediaStore.Audio.Media.IS_MUSIC} != 0",
+                    null,
+                    "${MediaStore.Audio.Media.TITLE} COLLATE NOCASE ASC"
+                )?.use { cursor ->
+                    val idCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media._ID)
+                    val titleCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.TITLE)
+                    val artistCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.ARTIST)
+                    val albumCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.ALBUM)
+                    val durationCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DURATION)
+                    val mimeCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.MIME_TYPE)
+                    buildList {
+                        while (cursor.moveToNext()) {
+                            val mediaId = cursor.getLong(idCol)
+                            val uri = ContentUris.withAppendedId(collection, mediaId)
+                            val mime = cursor.getString(mimeCol).orEmpty()
+                            val format = when {
+                                mime.contains("flac", true) -> "FLAC"
+                                mime.contains("wav", true) -> "WAV"
+                                mime.contains("mpeg", true) -> "MP3"
+                                mime.contains("mp4", true) -> "M4A"
+                                else -> mime.substringAfter('/').uppercase().ifBlank { "LOCAL" }
+                            }
+                            add(
+                                MediaTrack(
+                                    id = "local:" + mediaId,
+                                    title = cursor.getString(titleCol)?.takeIf { it.isNotBlank() } ?: "Unknown track",
+                                    artist = cursor.getString(artistCol)?.takeIf { it.isNotBlank() } ?: "Unknown artist",
+                                    album = cursor.getString(albumCol).orEmpty(),
+                                    backend = StreamingBackend.LOCAL,
+                                    streamUrl = uri.toString(),
+                                    durationMs = cursor.getLong(durationCol),
+                                    formatBadge = format,
+                                    isOfflineSaved = true
+                                )
+                            )
+                        }
+                    }
+                }.orEmpty()
+            }.getOrElse {
+                showToast("Could not scan phone audio: ${it.message}")
+                emptyList()
+            }
+            _localAudioTracks.value = scanned
+            _homeState.value = _homeState.value.copy(
+                songs = scanned + _homeState.value.songs.filter { it.backend != StreamingBackend.LOCAL }
+            )
+            showToast("Found ${scanned.size} songs on this phone")
         }
     }
 
