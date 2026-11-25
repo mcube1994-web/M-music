@@ -8,7 +8,8 @@ enum class AppTab(val label: String) {
     VIDEO_PLAYER("Video Player"),
     WEB_MOVIES("Web Movies"),
     DOWNLOAD("Download"),
-    SEARCH("Search")
+    SEARCH("Search"),
+    BRAINWAVE("Brainwave")
 }
 
 enum class MusicLanguage(val label: String, val queryHint: String) {
