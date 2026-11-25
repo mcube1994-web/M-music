@@ -56,7 +56,9 @@ import com.example.ui.theme.ObsidianCard
 import com.example.ui.theme.SpatialCyan
 import com.example.ui.theme.TextPrimary
 import com.example.ui.theme.TextSecondary
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.isActive
 import kotlin.math.PI
 import kotlin.math.sin
@@ -100,6 +102,7 @@ fun BrainwaveScreen(modifier: Modifier = Modifier) {
         try {
             track.setVolume(0.18f)
             track.play()
+            withContext(Dispatchers.IO) {
             while (currentCoroutineContext().isActive) {
                 for (i in 0 until frames) {
                     samples[i * 2] = (sin(leftPhase) * 5200).toInt().toShort()
@@ -110,6 +113,7 @@ fun BrainwaveScreen(modifier: Modifier = Modifier) {
                     if (rightPhase >= 2.0 * PI) rightPhase -= 2.0 * PI
                 }
                 track.write(samples, 0, samples.size, AudioTrack.WRITE_BLOCKING)
+            }
             }
         } finally {
             runCatching { track.pause() }
