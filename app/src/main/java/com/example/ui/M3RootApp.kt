@@ -116,6 +116,7 @@ import com.example.ui.screens.HomeScreen
 import com.example.ui.screens.SearchScreen
 import com.example.ui.screens.VideoPlayerScreen
 import com.example.ui.screens.WebMoviesScreen
+import com.example.ui.screens.WelcomeScreen
 import com.example.ui.theme.SpatialCyan
 import com.example.ui.theme.TextPrimary
 import com.example.ui.theme.TextSecondary
@@ -154,6 +155,8 @@ fun M3RootApp(
     val toastMessage by viewModel.toastMessage.collectAsStateWithLifecycle()
 
     val context = LocalContext.current
+    val onboardingPrefs = remember(context) { context.getSharedPreferences("m3_reborn_onboarding", Context.MODE_PRIVATE) }
+    var showWelcome by remember { mutableStateOf(!onboardingPrefs.getBoolean("welcome_complete", false)) }
     val activity = remember(context) { context.findActivity() }
     val configuration = LocalConfiguration.current
     val snackbarHostState = remember { SnackbarHostState() }
@@ -655,6 +658,15 @@ fun M3RootApp(
                 initialConfig = navidromeConfig,
                 onConnect = { url, user, pass -> viewModel.connectNavidrome(url, user, pass) },
                 onDismiss = { viewModel.setNavidromeDialogVisible(false) }
+            )
+        }
+
+        if (showWelcome) {
+            WelcomeScreen(
+                onContinue = {
+                    onboardingPrefs.edit().putBoolean("welcome_complete", true).apply()
+                    showWelcome = false
+                }
             )
         }
     }
