@@ -85,6 +85,7 @@ import com.example.ui.components.RichAudioVisualizerCanvas
 import com.example.ui.components.SpatialHeaderActionPill
 import com.example.ui.components.TrackRowCard
 import com.example.ui.theme.EmeraldVault
+import com.example.ui.theme.SpatialCyan
 import com.example.ui.theme.TextPrimary
 import com.example.ui.theme.TextSecondary
 
