@@ -78,9 +78,7 @@ fun WelcomeScreen(onContinue: () -> Unit) {
                 Text("M³", color = TextPrimary, style = MaterialTheme.typography.displayMedium, fontWeight = FontWeight.Black)
             }
             Text("M³ REBORN", color = SpatialCyan, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
-            Text("Your world.
-Your sound.
-Your escape.", color = TextPrimary, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
+            Text("Your world.\\nYour sound.\\nYour escape.", color = TextPrimary, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
             Text("One midnight studio for music, movies and mind.", color = TextSecondary, style = MaterialTheme.typography.bodyLarge, textAlign = TextAlign.Center)
             Row(horizontalArrangement = Arrangement.spacedBy(18.dp), verticalAlignment = Alignment.CenterVertically) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
