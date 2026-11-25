@@ -11,6 +11,16 @@ import android.view.WindowManager
 import android.webkit.WebChromeClient
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
@@ -149,6 +159,25 @@ fun M3RootApp(
     val vaultIds = remember(vaultTracks) { vaultTracks.map { it.id }.toSet() }
     val useRail = widthSizeClass != WindowWidthSizeClass.Compact
     val colorScheme = MaterialTheme.colorScheme
+    val neonTransition = rememberInfiniteTransition(label = "m3-night-bar-neon")
+    val neonCyanAlpha by neonTransition.animateFloat(
+        initialValue = 0.38f,
+        targetValue = 0.92f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 1450),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "neon-cyan-pulse"
+    )
+    val neonVioletAlpha by neonTransition.animateFloat(
+        initialValue = 0.82f,
+        targetValue = 0.24f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 1900),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "neon-violet-pulse"
+    )
     var webCustomFullscreen by remember {
         mutableStateOf<Pair<View, WebChromeClient.CustomViewCallback>?>(null)
     }
@@ -237,6 +266,25 @@ fun M3RootApp(
                     listOf(colorScheme.background, colorScheme.surface, colorScheme.background)
                 )
             )
+            .drawWithContent {
+                drawContent()
+                val inset = 3.dp.toPx()
+                drawRoundRect(
+                    color = Color(0xFF00E5FF).copy(alpha = neonCyanAlpha),
+                    topLeft = Offset(inset, inset),
+                    size = Size(size.width - inset * 2, size.height - inset * 2),
+                    cornerRadius = CornerRadius(24.dp.toPx()),
+                    style = Stroke(width = 2.dp.toPx())
+                )
+                val innerInset = 7.dp.toPx()
+                drawRoundRect(
+                    color = Color(0xFFB026FF).copy(alpha = neonVioletAlpha),
+                    topLeft = Offset(innerInset, innerInset),
+                    size = Size(size.width - innerInset * 2, size.height - innerInset * 2),
+                    cornerRadius = CornerRadius(21.dp.toPx()),
+                    style = Stroke(width = 1.dp.toPx())
+                )
+            }
     ) {
         Scaffold(
             containerColor = colorScheme.background,
