@@ -3,6 +3,7 @@ package com.example.ui.screens
 import android.media.AudioAttributes
 import android.media.AudioFormat
 import android.media.AudioTrack
+import android.speech.tts.TextToSpeech
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
@@ -32,6 +33,7 @@ import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.GraphicEq
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -48,6 +50,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.example.ui.theme.ElectricViolet
@@ -62,6 +65,13 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.isActive
 import kotlin.math.PI
 import kotlin.math.sin
+import java.util.Locale
+
+private enum class StoryLanguage(val label: String, val locale: Locale, val story: String) {
+    HINDI("हिन्दी", Locale("hi", "IN"), "एक शांत पहाड़ी गाँव में, हर सुबह सूरज की पहली किरण नदी पर चमकती थी। एक छोटा यात्री वहाँ रुककर हवा की आवाज़ सुनता और समझता कि शांति कहीं बाहर नहीं, हमारे भीतर भी होती है। उसने गहरी साँस ली और अपनी यात्रा मुस्कान के साथ आगे बढ़ाई।"),
+    BANGLA("বাংলা", Locale("bn", "BD"), "একটি শান্ত পাহাড়ি গ্রামে প্রতিদিন সকালে সূর্যের আলো নদীর জলে ঝলমল করত। এক পথিক সেখানে থেমে বাতাসের মৃদু শব্দ শুনত। সে বুঝল, শান্তি শুধু দূরে কোথাও নয়, আমাদের মনের মধ্যেও থাকে। তারপর সে নতুন আশায় পথ চলল।"),
+    ENGLISH("English", Locale.US, "In a quiet village beside the hills, the morning sun touched the river like gold. A traveller paused, listened to the trees, and remembered that peace can begin with one gentle breath. With a lighter heart, the traveller continued the journey.")
+}
 
 private enum class BrainPreset(val title: String, val hz: Double, val note: String, val accent: Color) {
     DELTA("Delta", 2.0, "2 Hz • Deep rest ambience", Color(0xFF7C6BFF)),
@@ -74,6 +84,36 @@ private enum class BrainPreset(val title: String, val hz: Double, val note: Stri
 fun BrainwaveScreen(modifier: Modifier = Modifier) {
     var selected by remember { mutableStateOf(BrainPreset.ALPHA) }
     var playing by remember { mutableStateOf(false) }
+    var storyLanguage by remember { mutableStateOf(StoryLanguage.HINDI) }
+    var ttsReady by remember { mutableStateOf(false) }
+    var storyStatus by remember { mutableStateOf("Preparing voice engine…") }
+    val context = LocalContext.current
+    var speechEngine by remember { mutableStateOf<TextToSpeech?>(null) }
+
+    DisposableEffect(context) {
+        val engine = TextToSpeech(context) { status ->
+            ttsReady = status == TextToSpeech.SUCCESS
+            if (status != TextToSpeech.SUCCESS) storyStatus = "Text-to-speech is unavailable on this device"
+        }
+        speechEngine = engine
+        onDispose {
+            engine.stop()
+            engine.shutdown()
+            speechEngine = null
+            ttsReady = false
+        }
+    }
+
+    LaunchedEffect(ttsReady, storyLanguage) {
+        if (ttsReady) {
+            val languageResult = speechEngine?.setLanguage(storyLanguage.locale)
+            storyStatus = when (languageResult) {
+                TextToSpeech.LANG_MISSING_DATA -> "Install the ${storyLanguage.label} voice in Android Text-to-speech settings"
+                TextToSpeech.LANG_NOT_SUPPORTED -> "This device does not support the selected voice"
+                else -> "Ready to narrate in ${storyLanguage.label}"
+            }
+        }
+    }
     val transition = rememberInfiniteTransition(label = "brainwave-pulse")
     val pulse by transition.animateFloat(
         initialValue = 0.42f,
@@ -146,6 +186,43 @@ fun BrainwaveScreen(modifier: Modifier = Modifier) {
                         Text(if (playing) "Pause session" else "Start listening", modifier = Modifier.padding(start = 8.dp))
                     }
                     Text(if (playing) "Playing softly • use comfortable volume" else "Ready when you are", color = TextSecondary, style = MaterialTheme.typography.labelSmall)
+                }
+            }
+        }
+        item {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text("STORIES & GUIDED LISTENING", color = SpatialCyan, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
+                Text("A quiet story, in your language.", color = TextPrimary, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    StoryLanguage.entries.forEach { language ->
+                        FilterChip(
+                            selected = storyLanguage == language,
+                            onClick = { speechEngine?.stop(); storyLanguage = language },
+                            label = { Text(language.label) }
+                        )
+                    }
+                }
+                Surface(color = ObsidianCard, shape = RoundedCornerShape(20.dp), modifier = Modifier.fillMaxWidth().border(1.dp, ElectricViolet.copy(alpha = 0.45f), RoundedCornerShape(20.dp))) {
+                    Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Text("The traveller and the quiet river", color = TextPrimary, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                        Text(storyLanguage.story, color = TextSecondary, style = MaterialTheme.typography.bodyMedium)
+                        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                            Button(
+                                onClick = {
+                                    speechEngine?.speak(storyLanguage.story, TextToSpeech.QUEUE_FLUSH, null, "m3-guided-story")
+                                    storyStatus = "Narrating in ${storyLanguage.label}"
+                                },
+                                enabled = ttsReady && !storyStatus.contains("Install") && !storyStatus.contains("does not support"),
+                                colors = ButtonDefaults.buttonColors(containerColor = SpatialCyan)
+                            ) { Text("Read story", color = ObsidianBg) }
+                            Button(
+                                onClick = { speechEngine?.stop(); storyStatus = "Narration stopped" },
+                                colors = ButtonDefaults.buttonColors(containerColor = ElectricViolet)
+                            ) { Text("Stop") }
+                        }
+                        Text(storyStatus, color = TextSecondary, style = MaterialTheme.typography.labelSmall)
+                        Text("Narration uses your phone's installed Text-to-speech voice. Download a Hindi or Bengali voice in Android settings if needed.", color = TextSecondary, style = MaterialTheme.typography.labelSmall)
+                    }
                 }
             }
         }
