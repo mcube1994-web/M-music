@@ -74,13 +74,27 @@ fun M3GlassCard(
     content: @Composable ColumnScope.() -> Unit
 ) {
     val shape = RoundedCornerShape(20.dp)
+    val neonTransition = rememberInfiniteTransition(label = "m3-card-neon")
+    val neonPulse by neonTransition.animateFloat(
+        initialValue = 0.22f,
+        targetValue = 0.72f,
+        animationSpec = infiniteRepeatable(tween(1750), RepeatMode.Reverse),
+        label = "m3-card-border-pulse"
+    )
+    val neonBorder = Brush.linearGradient(
+        listOf(
+            Color(0xFF00E5FF).copy(alpha = neonPulse),
+            Color(0xFFB026FF).copy(alpha = 0.88f - neonPulse * 0.42f),
+            borderColor.copy(alpha = 0.38f)
+        )
+    )
     Surface(
         modifier = modifier
             .clip(shape)
             .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier),
         shape = shape,
         color = MaterialTheme.colorScheme.surfaceVariant,
-        border = BorderStroke(1.dp, borderColor),
+        border = BorderStroke(1.2.dp, neonBorder),
         tonalElevation = 4.dp
     ) {
         Column(content = content)
