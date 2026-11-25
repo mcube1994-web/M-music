@@ -53,6 +53,7 @@ import androidx.compose.material.icons.rounded.FullscreenExit
 import androidx.compose.material.icons.rounded.Home
 import androidx.compose.material.icons.rounded.Language
 import androidx.compose.material.icons.rounded.Movie
+import androidx.compose.material.icons.rounded.GraphicEq
 import androidx.compose.material.icons.rounded.ScreenRotation
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material3.Icon
@@ -110,6 +111,7 @@ import com.example.ui.components.PersistentMiniPlayer
 import com.example.ui.components.StudioPlayerSheet
 import com.example.ui.components.UpNextQueueSheet
 import com.example.ui.screens.DownloadVaultScreen
+import com.example.ui.screens.BrainwaveScreen
 import com.example.ui.screens.HomeScreen
 import com.example.ui.screens.SearchScreen
 import com.example.ui.screens.VideoPlayerScreen
@@ -516,6 +518,8 @@ fun M3RootApp(
                             modifier = contentModifier
                         )
 
+                        AppTab.BRAINWAVE -> BrainwaveScreen(modifier = contentModifier)
+
                         AppTab.SEARCH -> SearchScreen(
                             state = searchState,
                             recentSearches = recentSearches,
@@ -867,4 +871,5 @@ private fun tabIcons(tab: AppTab): Pair<ImageVector, ImageVector> = when (tab) {
     AppTab.WEB_MOVIES -> Icons.Rounded.Language to Icons.Outlined.Language
     AppTab.DOWNLOAD -> Icons.Rounded.Download to Icons.Outlined.Download
     AppTab.SEARCH -> Icons.Rounded.Search to Icons.Outlined.Search
+    AppTab.BRAINWAVE -> Icons.Rounded.GraphicEq to Icons.Rounded.GraphicEq
 }
